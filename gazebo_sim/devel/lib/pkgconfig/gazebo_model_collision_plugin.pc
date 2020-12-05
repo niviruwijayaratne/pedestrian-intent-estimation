@@ -1,0 +1,8 @@
+prefix=/home/anshul2/Desktop/poseflow-pie/gazebo_sim/devel
+
+Name: gazebo_model_collision_plugin
+Description: Description of gazebo_model_collision_plugin
+Version: 0.0.1
+Cflags: -I/home/anshul2/Desktop/poseflow-pie/gazebo_sim/devel/include
+Libs: -L${prefix}/lib 
+Requires: roscpp sensor_msgs gazebo_ros gazebo_plugins

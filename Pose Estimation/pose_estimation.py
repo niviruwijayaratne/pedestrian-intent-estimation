@@ -403,7 +403,9 @@ def img_inference(img, bbox):
     img_canvas = link_key_point(img_points, candidates, subsets)
     print("done drawing")
     # cv2.imwrite( "out.jpg", img_canvas[...,::-1])
-    cv2.imwrite(os.path.join(RESULTS_PATH, "results.jpg"), img_canvas)
+    # cv2.imwrite(os.path.join(RESULTS_PATH, "results.jpg"), img_canvas)
+    print("calculating features")
+    get_rf_features(peaks)
 
 
 def vid_inference(vid_frames):
