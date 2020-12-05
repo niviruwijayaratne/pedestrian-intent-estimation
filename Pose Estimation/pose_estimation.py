@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.optim as optim
+import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
@@ -172,12 +173,12 @@ def get_paf_and_heatmap(model, img_raw, scale_search, param_stride=8, box_size=3
     paf_avg = torch.zeros((len(multiplier), 38, img_raw.shape[0], img_raw.shape[1]))
 
     for i, scale in enumerate(multiplier):
-        img_test = cv2.resize(img_raw, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        img_test = cv2.resize(np.float32(img_raw.cpu()), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         img_test_pad, pad = pad_right_down_corner(img_test, param_stride, param_stride)
         img_test_pad = np.transpose(np.float32(img_test_pad[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
 
         feed = Variable(torch.from_numpy(img_test_pad))
-        output1, output2 = model(feed)
+        output1, output2 = model(feed.contiguous())
 
         print(output1.size())
         print(output2.size())
@@ -344,7 +345,7 @@ def draw_key_point(subset, all_peaks, img_raw):
             del_ids.append(i)
     subset = np.delete(subset, del_ids, axis=0)
 
-    img_canvas = img_raw.copy()  # B,G,R order
+    img_canvas = img_raw.cpu().numpy().copy()  # B,G,R order
 
     for i in range(18):
         for j in range(len(all_peaks[i])):
@@ -372,17 +373,28 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3):
 
     return img_canvas
 
-def img_inference(img):
+def img_inference(img, bbox):
     im = cv2.imread(img)
+    tlx, tly, brx, bry = bbox[0], bbox[1], bbox[2], bbox[3]
+    im = im[tly: bry, tlx: brx]
+    im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
+    use_gpu = True
+    if use_gpu:
+        model_pose.cuda()
+        model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
+        cudnn.benchmark = True
     scale_param = [0.5, 1.0, 1.5, 2.0]
     paf_info, heatmap_info = get_paf_and_heatmap(model_pose, im, scale_param)
     print("paf done")
     peaks = extract_heatmap_info(heatmap_info)
+    # for i in range(18):
+    #     for j in range()
+    # print(all_peaks[i][j][0:2])
     print("heatmap extracted")
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
     print("paf extracted")
@@ -393,10 +405,66 @@ def img_inference(img):
     # cv2.imwrite( "out.jpg", img_canvas[...,::-1])
     cv2.imwrite(os.path.join(RESULTS_PATH, "results.jpg"), img_canvas)
 
+
+def vid_inference(vid_frames):
+    for frame in sorted(os.listdir(vid_frames)):
+        # print(vid_frames + frame)
+        img_inference(vid_frames + frame)
+
+def get_height(points):
+    pass 
+
+def get_vectors(starting_point, other_points):
+    starting_point = np.squeeze(starting_point)
+    vecs = np.array([])
+    for point in other_points:
+        point = np.squeeze(point)
+        if point == starting_point:
+            continue
+        vecs = np.append(vecs, [(point[0] - starting_point[0], point[1] - starting_point[1])])
+    return vecs
+
+def get_angle(vec1, vec2):
+    mag1 = np.linalg.norm(np.array([vec1[0], vec1[1]]))
+    mag2 = np.linalg.norm(np.array([vec2[0], vec2[1]]))
+    theta = np.arccos(vec1.dot(vec2)/(mag1*mag2))
+    return theta
+
+def get_rf_features(points):
+    x_distances = np.array([])
+    y_distances = np.array([])
+    two_point_angles = np.array([])
+    triangle_angles = np.array([])
+    for i in range(len(points)):
+        for j in range(i + 1, len(points)):
+            xi, yi = np.squeeze(points[i])[0], np.squeeze(points[i])[1]
+            xj, yj = np.squeeze(points[j])[0], np.squeeze(points[j])[1]
+            x_distances = np.append(x_distances, np.array([abs(xj - xi)]))
+            y_distances = np.append(y_distances, np.array([abs(yj - yi)]))
+            deltax = xj - xi
+            deltay = yj - yi
+            theta1 = np.arctan2(deltax, deltay)
+            theta2 = np.arctan2(deltay, deltax)
+            two_point_angles = np.append(two_point_angles, np.array([theta1, theta2]))            
+            out_vecs = get_vectors(np.squeeze(points[i])[0:2], points)
+            for k in range(len(out_vecs)):
+                for l in range(k + 1, len(out_vecs)):
+                    triangle_angles = np.append(triangle_angles, get_angle(out_vecs[k], out_vecs[l]))
+    feature_vec = np.append(x_distances, y_distances, two_point_angles, triangle_angles)
+    feature_vec /= get_height(points)
+    return feature_vec
+
 if __name__ == '__main__':
     parser = ap.ArgumentParser()
-    parser.add_argument("-i", required=True, help="path to image")
+    parser.add_argument("-f", required=False, help="path to video frames")
+    parser.add_argument("-i", required=False, help="path to image")
     args = parser.parse_args()
-    img_inference(args.i)
+    if args.f:
+        # print(args.f)
+        vid_inference(args.f)
+    elif args.i:
+        img_inference(args.i)
+    else:
+        print("Please pass in either an image or a list of images")
     # print(get_pose_model())
 
