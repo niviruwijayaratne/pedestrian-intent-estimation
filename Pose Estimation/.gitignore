@@ -1,2 +1,5 @@
 *.pth
 *.tar
+JAAD/JAAD_clips/
+JAAD/images/
+*.pkl
