@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.optim as optim
+import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
@@ -172,12 +173,12 @@ def get_paf_and_heatmap(model, img_raw, scale_search, param_stride=8, box_size=3
     paf_avg = torch.zeros((len(multiplier), 38, img_raw.shape[0], img_raw.shape[1]))
 
     for i, scale in enumerate(multiplier):
-        img_test = cv2.resize(img_raw, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        img_test = cv2.resize(np.float32(img_raw.cpu()), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         img_test_pad, pad = pad_right_down_corner(img_test, param_stride, param_stride)
         img_test_pad = np.transpose(np.float32(img_test_pad[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
 
         feed = Variable(torch.from_numpy(img_test_pad))
-        output1, output2 = model(feed)
+        output1, output2 = model(feed.contiguous())
 
         print(output1.size())
         print(output2.size())
@@ -344,7 +345,7 @@ def draw_key_point(subset, all_peaks, img_raw):
             del_ids.append(i)
     subset = np.delete(subset, del_ids, axis=0)
 
-    img_canvas = img_raw.copy()  # B,G,R order
+    img_canvas = img_raw.cpu().numpy().copy()  # B,G,R order
 
     for i in range(18):
         for j in range(len(all_peaks[i])):
@@ -374,11 +375,17 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3):
 
 def img_inference(img):
     im = cv2.imread(img)
+    im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
+    use_gpu = True
+    if use_gpu:
+        model_pose.cuda()
+        model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
+        cudnn.benchmark = True
     scale_param = [0.5, 1.0, 1.5, 2.0]
     paf_info, heatmap_info = get_paf_and_heatmap(model_pose, im, scale_param)
     print("paf done")
