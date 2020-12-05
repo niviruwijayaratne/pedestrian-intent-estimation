@@ -180,8 +180,8 @@ def get_paf_and_heatmap(model, img_raw, scale_search, param_stride=8, box_size=3
         feed = Variable(torch.from_numpy(img_test_pad))
         output1, output2 = model(feed.contiguous())
 
-        print(output1.size())
-        print(output2.size())
+#         print(output1.size())
+#         print(output2.size())
 
         heatmap = nn.UpsamplingBilinear2d((img_raw.shape[0], img_raw.shape[1]))(output2)
 
@@ -344,7 +344,6 @@ def draw_key_point(subset, all_peaks, img_raw):
         if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
             del_ids.append(i)
     subset = np.delete(subset, del_ids, axis=0)
-
     img_canvas = img_raw.cpu().numpy().copy()  # B,G,R order
 
     for i in range(18):
@@ -375,37 +374,49 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3):
 
 def img_inference(img, bbox):
     im = cv2.imread(img)
-    tlx, tly, brx, bry = bbox[0], bbox[1], bbox[2], bbox[3]
+    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     im = im[tly: bry, tlx: brx]
     im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
+#     print("loading model...")
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
+#     print("FINISHED")
     use_gpu = True
     if use_gpu:
+#         print("setting GPU settings...")
         model_pose.cuda()
         model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
         cudnn.benchmark = True
+#     print("FINISHED")
     scale_param = [0.5, 1.0, 1.5, 2.0]
+#     print("getting initial pafs and heatmap...")
     paf_info, heatmap_info = get_paf_and_heatmap(model_pose, im, scale_param)
-    print("paf done")
+#     print("FINISHED")
+#     print("extracting heatmaps...")
     peaks = extract_heatmap_info(heatmap_info)
+#     print("FINISHED")
     # for i in range(18):
     #     for j in range()
     # print(all_peaks[i][j][0:2])
-    print("heatmap extracted")
+    feature_peaks = [peaks[i] for i in KEYPOINTS]
+#     print("extracting pafs...")
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
-    print("paf extracted")
+#     print("FINISHED")
     subsets, candidates = get_subsets(con_all, sp_k, peaks)
+#     print("drawing keypoints...")
     subsets, img_points = draw_key_point(subsets, peaks, im)
     img_canvas = link_key_point(img_points, candidates, subsets)
-    print("done drawing")
+#     print("FINISHED")
     # cv2.imwrite( "out.jpg", img_canvas[...,::-1])
     # cv2.imwrite(os.path.join(RESULTS_PATH, "results.jpg"), img_canvas)
-    print("calculating features")
-    get_rf_features(peaks)
+#     print("calculating features...")
+    features = get_rf_features(feature_peaks)
+#     print("FINISHED")
+#     cv2.imwrite(os.getcwd() + "/result.jpg", img_canvas[...,::-1])
+    return features
 
 
 def vid_inference(vid_frames):
@@ -414,19 +425,42 @@ def vid_inference(vid_frames):
         img_inference(vid_frames + frame)
 
 def get_height(points):
-    pass 
+    maxy, miny = -np.inf, np.inf
+    for point in points:
+        point = np.squeeze(point)[0:2]
+        if not len(point):
+            continue
+        if not (type(point[0]) == np.float64):
+#             print(type(point[0]), "Point was 2d")
+            point = np.squeeze(point[0])[0:2]
+        miny = min(point[1], miny)
+        maxy = max(point[1], maxy)
+    return maxy - miny
 
 def get_vectors(starting_point, other_points):
     starting_point = np.squeeze(starting_point)
-    vecs = np.array([])
-    for point in other_points:
-        point = np.squeeze(point)
-        if point == starting_point:
+#     print(starting_point, other_points)
+    vecs = np.array([[0, 0]])
+    for p in other_points:
+#         print(p)
+        point = np.squeeze(p)[0:2]
+        if not len(point):
+#             print("first if")
             continue
-        vecs = np.append(vecs, [(point[0] - starting_point[0], point[1] - starting_point[1])])
-    return vecs
+        if not (type(point[0]) == np.float64):
+#             print("second if", type(point[0]))
+#             print(type(point[0]), "Point was 2d")
+            point = np.squeeze(point[0])[0:2]
+        if all(point == starting_point):
+#             print("third if", point, starting_point)
+            continue
+#         print("reached")
+        vecs = np.vstack([vecs, [(point[0] - starting_point[0], point[1] - starting_point[1])]])
+#     print(vecs)
+    return vecs[1:]
 
 def get_angle(vec1, vec2):
+#     print(vec1, vec2)
     mag1 = np.linalg.norm(np.array([vec1[0], vec1[1]]))
     mag2 = np.linalg.norm(np.array([vec2[0], vec2[1]]))
     theta = np.arccos(vec1.dot(vec2)/(mag1*mag2))
@@ -438,9 +472,13 @@ def get_rf_features(points):
     two_point_angles = np.array([])
     triangle_angles = np.array([])
     for i in range(len(points)):
+        if not any(points[i]):
+            continue
         for j in range(i + 1, len(points)):
-            xi, yi = np.squeeze(points[i])[0], np.squeeze(points[i])[1]
-            xj, yj = np.squeeze(points[j])[0], np.squeeze(points[j])[1]
+            if not any(points[j]):
+                continue
+            xi, yi = np.squeeze(points[i][0])[0], np.squeeze(points[i][0])[1]
+            xj, yj = np.squeeze(points[j][0])[0], np.squeeze(points[j][0])[1]
             x_distances = np.append(x_distances, np.array([abs(xj - xi)]))
             y_distances = np.append(y_distances, np.array([abs(yj - yi)]))
             deltax = xj - xi
@@ -448,12 +486,17 @@ def get_rf_features(points):
             theta1 = np.arctan2(deltax, deltay)
             theta2 = np.arctan2(deltay, deltax)
             two_point_angles = np.append(two_point_angles, np.array([theta1, theta2]))            
-            out_vecs = get_vectors(np.squeeze(points[i])[0:2], points)
-            for k in range(len(out_vecs)):
-                for l in range(k + 1, len(out_vecs)):
-                    triangle_angles = np.append(triangle_angles, get_angle(out_vecs[k], out_vecs[l]))
-    feature_vec = np.append(x_distances, y_distances, two_point_angles, triangle_angles)
+        out_vecs = get_vectors(np.squeeze(points[i][0])[0:2], points)
+#         print("OUT_VECS", out_vecs)
+        for k in range(len(out_vecs)):
+            for l in range(k + 1, len(out_vecs)):
+                triangle_angles = np.append(triangle_angles, get_angle(out_vecs[k], out_vecs[l]))
+#             except:
+#                 print("Empty Point", points[i])
+    feature_vec = np.append(np.append(x_distances, y_distances), np.append(two_point_angles, triangle_angles))
+#     print(get_height(points))
     feature_vec /= get_height(points)
+#     print(feature_vec)
     return feature_vec
 
 if __name__ == '__main__':
