@@ -1019,7 +1019,7 @@ class JAAD(object):
         """
         params = {'fstride': 1,
                   'sample_type': 'all',  # 'beh'
-                  'subset': 'all_videos',
+                  'subset': 'high_visibility',
                   'width_rng': [60, float('inf')],
                   'squarify_ratio': 0,
                   'data_split_type': 'default',  # kfold, random, default
