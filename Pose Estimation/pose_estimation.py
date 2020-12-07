@@ -402,6 +402,9 @@ def img_inference(img, bbox):
     #     for j in range()
     # print(all_peaks[i][j][0:2])
     feature_peaks = [peaks[i] for i in KEYPOINTS]
+    if not all(feature_peaks):
+        print("Broken Squence")
+#     print(feature_peaks)
 #     print("extracting pafs...")
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
 #     print("FINISHED")
@@ -460,10 +463,10 @@ def get_vectors(starting_point, other_points):
     return vecs[1:]
 
 def get_angle(vec1, vec2):
-#     print(vec1, vec2)
     mag1 = np.linalg.norm(np.array([vec1[0], vec1[1]]))
     mag2 = np.linalg.norm(np.array([vec2[0], vec2[1]]))
     theta = np.arccos(vec1.dot(vec2)/(mag1*mag2))
+    print(vec1, vec2, mag1, mag2, theta)
     return theta
 
 def get_rf_features(points):
