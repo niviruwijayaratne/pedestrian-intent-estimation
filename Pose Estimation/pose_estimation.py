@@ -391,20 +391,15 @@ def img_inference(img, bbox):
     paf_info, heatmap_info = get_paf_and_heatmap(model_pose, im, scale_param)
     peaks = extract_heatmap_info(heatmap_info)
     feature_peaks = [peaks[i] for i in KEYPOINTS]
-    if not all(feature_peaks):
-        print("Broken Squence")
-        return
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
     subsets, candidates = get_subsets(con_all, sp_k, peaks)
     subsets, img_points = draw_key_point(subsets, peaks, im)
     img_canvas = link_key_point(img_points, candidates, subsets)
+    if not all(feature_peaks):
+        return np.array([[np.nan]])
     features = get_rf_features(feature_peaks)
     return features
 
-
-def vid_inference(vid_frames):
-    for frame in sorted(os.listdir(vid_frames)):
-        img_inference(vid_frames + frame)
 
 def get_height(points):
     maxy, miny = -100000000, 100000000
@@ -414,24 +409,28 @@ def get_height(points):
             point = np.squeeze(point[0])[0:2]
         miny = min(point[1], miny)
         maxy = max(point[1], maxy)
-    return maxy - miny
+    height = maxy - miny
+    return height
 
 def get_vectors(starting_point, other_points):
+#     print(starting_point, len(other_points))
     starting_point = np.squeeze(starting_point)
-    vecs = np.array([[0, 0]])
+    vecs = np.array([(0, 0)])
     for p in other_points:
-        point = np.squeeze(p)[0:2]
+        point = np.squeeze(p)[0:]
         if not (type(point[0]) == np.float64):
-            point = np.squeeze(point[0])[0:2]
-        if all(point == starting_point):
+            point = point[0]
+        if all(point[:2] == starting_point[:2]):
             continue
-        vecs = np.vstack([vecs, [[point[0] - starting_point[0], point[1] - starting_point[1]]]])
+        vecs = np.vstack([vecs, [(point[0] - starting_point[0], point[1] - starting_point[1])]])
+#     print(starting_point, vecs[1:])
     return vecs[1:]
 
 def get_angle(vec1, vec2):
     mag1 = np.linalg.norm(np.array([vec1[0], vec1[1]]))
     mag2 = np.linalg.norm(np.array([vec2[0], vec2[1]]))
     cos_theta = vec1.dot(vec2)/(mag1*mag2)
+#     print(cos_theta)
     if cos_theta > 1.0:
         cos_theta = np.float64(1.0)
     if cos_theta < -1.0:
@@ -455,13 +454,16 @@ def get_rf_features(points):
             theta1 = np.arctan2(deltax, deltay)
             theta2 = np.arctan2(deltay, deltax)
             two_point_angles = np.append(two_point_angles, np.array([theta1, theta2]))            
-        out_vecs = get_vectors(np.squeeze(points[i][0])[0:2], points)
+        out_vecs = get_vectors(np.squeeze(points[i][0]), points)
         for k in range(len(out_vecs)):
             for l in range(k + 1, len(out_vecs)):
                 triangle_angles = np.append(triangle_angles, get_angle(out_vecs[k], out_vecs[l]))
+#             print(len(triangle_angles))
+#         print(len(out_vecs))
     feature_vec = np.append(np.append(x_distances, y_distances), np.append(two_point_angles, triangle_angles))
     feature_vec /= get_height(points)
     return feature_vec
+
 
 if __name__ == '__main__':
     parser = ap.ArgumentParser()
