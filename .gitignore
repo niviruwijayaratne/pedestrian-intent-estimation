@@ -1,1 +1,4 @@
-Pose Estimation/assets/
+pose_estimation/assets/
+pose_estimation/utils/
+pose_estimation/JAAD/pose_features_test/
+
