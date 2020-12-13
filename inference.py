@@ -16,24 +16,34 @@ def main():
     ap.add_argument("--input", help="path to video")
     ap.add_argument("--output", help="path to output", default="results/")
     args = vars(ap.parse_args())
-
+    
     ssd = build_ssd('test', 300, 21)    # initialize SSD
-    ssd.load_weights(args.ssd_weights)
+    ssd.load_weights(args["ssd_weights"])
     detector = Detector(ssd)
-    vid = cv2.VideoCapture(args.input)
+    vid = cv2.VideoCapture(args["input"])
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     out = cv2.VideoWriter('output.avi',fourcc, 20.0, (640,480))
     frame_count = {}
     ped_features = {}
-    classifier = pickle.load(args.rf_weights)
+    with open(args["rf_weights"], 'rb') as f:
+        classifier = pickle.load(f)
+    print("All Models Loaded")
+    counter = 0
     while True:
         ret, frame = vid.read()
+        print("Frame {}".format(counter))
+        counter += 1
+        if counter < 143:
+            continue
         if ret:
             bboxes = detector.get_bbs(frame)
+            print("Found {} people".format(len(bboxes)))
             for i, bbox in enumerate(bboxes):
                 frame, features = img_inference(frame, bbox)
+                cv2.imwrite("blah.jpg", frame)
+                return
                 frame_count["pedestrian" + str(i)] = 1 + frame_count.get("pedestrian" + str(i), 0)
-                if ped_features["pedestrian" + str(i)]:
+                if "pedestrian" + str(i) in ped_features:
                     if len(ped_features["pedestrian" + str(i)] >= 5544):
                         if classifier.predict(ped_features["pedestrian" + str(i)]):
                             frame = cv2.putText(frame, "C", (bbox[0], bbox[1]), "FONT_HERSHEY_PLAIN", (0, 255, 0), 1)
@@ -45,8 +55,8 @@ def main():
                         ped_features["pedestrian" + str(i)] = np.append(ped_features["pedestrian" + str(i)], features)
                 else:
                     ped_features["pedestrian" + str(i)] = features
-                frame = cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 1)
-            out.write(frame)
+                frame = cv2.rectangle(np.array(frame), (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), 255, 1)
+                cv2.imwrite(args["output"] + "frame" + str(counter) + ".jpg", frame)
         else:
             break
     vid.release()

@@ -20,9 +20,12 @@ import argparse as ap
 from scipy.ndimage.filters import gaussian_filter
 from torch.autograd import Variable
 
+import sys
+sys.path.append(os.getcwd() + "/pose_estimation/")
 from utils.utils import *
 from scipy.ndimage.filters import gaussian_filter
-from config import *
+from pose_estimation.config import *
+print(WEIGHTS_PATH)
 
 # find connection in the specified sequence, center 29 is in the position 15
 limb_seq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10],
@@ -369,11 +372,11 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3):
             polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
             cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
             img_canvas = cv2.addWeighted(img_canvas, 0.4, cur_canvas, 0.6, 0)
-
     return img_canvas
 
 def img_inference(img, bbox):
-    im = cv2.imread(img)
+    #im = cv2.imread(img)
+    im = img
     tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     im = im[tly: bry, tlx: brx]
     im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
@@ -396,9 +399,9 @@ def img_inference(img, bbox):
     subsets, img_points = draw_key_point(subsets, peaks, im)
     img_canvas = link_key_point(img_points, candidates, subsets)
     if not all(feature_peaks):
-        return np.array([[np.nan]])
+        return np.array([]), np.array([]) 
     features = get_rf_features(feature_peaks)
-    return img_canvas[...,::-1], features
+    return img_canvas, features
 
 
 def get_height(points):

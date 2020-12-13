@@ -1,6 +1,6 @@
 import os
 
-WEIGHTS_PATH = os.path.join("/home/ubuntu/niviru/poseflow-pie/Pose Estimation", "utils", "coco_pose_iter_440000.pth.tar")
+WEIGHTS_PATH = os.path.join("/home/ubuntu/niviru/poseflow-pie/pose_estimation", "utils", "coco_pose_iter_440000.pth.tar")
 RESULTS_PATH = os.path.join("/home/ubuntu/niviru/poseflow-pie/Pose Estimation", "utils", "assets", "results")
 LEFT_SHOULDER = 5
 RIGHT_SHOULDER = 2

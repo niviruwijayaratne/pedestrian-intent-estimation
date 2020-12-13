@@ -12,6 +12,7 @@ import numpy as np
 import cv2
 if torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+sys.path.append(os.getcwd() + "/detection/ssd_final/")
 from data import VOC_CLASSES as labels
 
 
@@ -26,15 +27,15 @@ class Detector():
         x = x.astype(np.float32)
         x = x[:, :, ::-1].copy()
         x = torch.from_numpy(x).permute(2, 0, 1)
-        frame = Variable(x.unsqueeze(0))
+        frame = x.unsqueeze(0)
         return frame
 
     def get_bbs(self, frame):
              # wrap tensor in Variable
-        preprocessed_frame = preprocess(frame)
+        preprocessed_frame = self.preprocess(frame)
         if torch.cuda.is_available():
             preprocessed_frame = preprocessed_frame.cuda()
-        y = self.model(preprocessed_frame).data
+        y = self.model(preprocessed_frame)
         scale = torch.Tensor(frame.shape[1::-1]).repeat(2)
         bboxes = []
         for i in range(y.size(1)):
@@ -47,7 +48,7 @@ class Detector():
                 if labels[i - 1] != "person":
                     j += 1
                     continue
-                bboxes.append((y[0,i,j,1:]*scale).cpu().numpy())
+                bboxes.append((y[0,i,j,1:]*scale).cpu().detach().numpy())
                 j += 1
         return bboxes
 
