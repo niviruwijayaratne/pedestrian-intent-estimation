@@ -398,7 +398,7 @@ def img_inference(img, bbox):
     if not all(feature_peaks):
         return np.array([[np.nan]])
     features = get_rf_features(feature_peaks)
-    return features
+    return img_canvas[...,::-1], features
 
 
 def get_height(points):
