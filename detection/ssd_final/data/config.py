@@ -1,9 +1,11 @@
 # config.py
+import os
 import os.path
 
 # gets home dir cross platform
 # HOME = os.path.expanduser("~")
-HOME = "/Users/niviru/Desktop/Classes/ECE 498/SSD/ssd.pytorch"
+HOME = os.getcwd() + "/detection/ssd_final"
+#HOME = "/Users/niviru/Desktop/Classes/ECE 498/SSD/ssd.pytorch"
 
 # for making bounding boxes pretty
 COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
