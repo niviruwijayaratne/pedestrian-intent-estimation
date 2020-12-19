@@ -338,8 +338,9 @@ def get_subsets(connection_all, special_k, all_peaks):
     return subset, candidate
 
 
-def draw_key_point(subset, all_peaks, img_raw):
+def draw_key_point(subset, all_peaks, img_raw, bbox):
     del_ids = []
+    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     for i in range(len(subset)):
         if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
             del_ids.append(i)
@@ -348,20 +349,21 @@ def draw_key_point(subset, all_peaks, img_raw):
 
     for i in range(18):
         for j in range(len(all_peaks[i])):
-            cv2.circle(img_canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
+            cv2.circle(img_canvas, (all_peaks[i][j][0] + tly, all_peaks[i][j][1] + tlx), 4, colors[i], thickness=-1)
 
     return subset, img_canvas
 
 
-def link_key_point(img_canvas, candidate, subset, stickwidth=3):
+def link_key_point(img_canvas, candidate, subset, stickwidth=3, bbox):
+    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     for i in range(17):
         for n in range(len(subset)):
             index = subset[n][np.array(limb_seq[i]) - 1]
             if -1 in index:
                 continue
             cur_canvas = img_canvas.copy()
-            Y = candidate[index.astype(int), 0]
-            X = candidate[index.astype(int), 1]
+            Y = candidate[index.astype(int), 0] + tlx
+            X = candidate[index.astype(int), 1] + tly
             mX = np.mean(X)
             mY = np.mean(Y)
             length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
@@ -372,17 +374,18 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3):
 
     return img_canvas
 
-def img_inference(img, bbox):
+def img_inference(img, bbox=None):
     im = cv2.imread(img)
-    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-    im = im[tly: bry, tlx: brx]
+    if bbox:
+        tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        im = im[tly: bry, tlx: brx]
     im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
-    use_gpu = True
+    use_gpu = False
     if use_gpu:
         model_pose.cuda()
         model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
