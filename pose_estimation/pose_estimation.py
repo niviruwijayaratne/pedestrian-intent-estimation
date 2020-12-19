@@ -398,12 +398,12 @@ def img_inference(img, bbox=None):
     feature_peaks = [peaks[i] for i in KEYPOINTS]
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
     subsets, candidates = get_subsets(con_all, sp_k, peaks)
-    subsets, img_points = draw_key_point(subsets, peaks, im)
-    img_canvas = link_key_point(img_points, candidates, subsets)
+    subsets, img_points = draw_key_point(subsets, peaks, im, bbox)
+    img_canvas = link_key_point(img_points, candidates, subsets, bbox)
     if not all(feature_peaks):
         return np.array([]), np.array([]) 
     features = get_rf_features(feature_peaks)
-    return img_canvas, features
+    return img_canvas[...,::-1], features
 
 
 def get_height(points):
