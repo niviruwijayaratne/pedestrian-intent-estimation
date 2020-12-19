@@ -24,7 +24,7 @@ import sys
 sys.path.append(os.getcwd() + "/pose_estimation/")
 from utils.utils import *
 from scipy.ndimage.filters import gaussian_filter
-from pose_estimation.config import *
+from config import *
 print(WEIGHTS_PATH)
 
 # find connection in the specified sequence, center 29 is in the position 15
@@ -341,9 +341,8 @@ def get_subsets(connection_all, special_k, all_peaks):
     return subset, candidate
 
 
-def draw_key_point(subset, all_peaks, img_raw, bbox):
+def draw_key_point(subset, all_peaks, img_raw):
     del_ids = []
-    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     for i in range(len(subset)):
         if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
             del_ids.append(i)
@@ -352,21 +351,20 @@ def draw_key_point(subset, all_peaks, img_raw, bbox):
 
     for i in range(18):
         for j in range(len(all_peaks[i])):
-            cv2.circle(img_canvas, (all_peaks[i][j][0] + tly, all_peaks[i][j][1] + tlx), 4, colors[i], thickness=-1)
+            cv2.circle(img_canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
 
     return subset, img_canvas
 
 
-def link_key_point(img_canvas, candidate, subset, stickwidth=3, bbox):
-    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+def link_key_point(img_canvas, candidate, subset, stickwidth=3):
     for i in range(17):
         for n in range(len(subset)):
             index = subset[n][np.array(limb_seq[i]) - 1]
             if -1 in index:
                 continue
             cur_canvas = img_canvas.copy()
-            Y = candidate[index.astype(int), 0] + tlx
-            X = candidate[index.astype(int), 1] + tly
+            Y = candidate[index.astype(int), 0]
+            X = candidate[index.astype(int), 1]
             mX = np.mean(X)
             mY = np.mean(Y)
             length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
@@ -376,18 +374,18 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3, bbox):
             img_canvas = cv2.addWeighted(img_canvas, 0.4, cur_canvas, 0.6, 0)
     return img_canvas
 
-def img_inference(img, bbox=None):
-    im = cv2.imread(img)
-    if bbox:
-        tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        im = im[tly: bry, tlx: brx]
+def img_inference(img, bbox):
+    #im = cv2.imread(img)
+    im = img
+    tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+    im = im[tly: bry, tlx: brx]
     im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
-    use_gpu = False
+    use_gpu = True
     if use_gpu:
         model_pose.cuda()
         model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
@@ -398,12 +396,12 @@ def img_inference(img, bbox=None):
     feature_peaks = [peaks[i] for i in KEYPOINTS]
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
     subsets, candidates = get_subsets(con_all, sp_k, peaks)
-    subsets, img_points = draw_key_point(subsets, peaks, im, bbox)
-    img_canvas = link_key_point(img_points, candidates, subsets, bbox)
+    subsets, img_points = draw_key_point(subsets, peaks, im)
+    img_canvas = link_key_point(img_points, candidates, subsets)
     if not all(feature_peaks):
         return np.array([]), np.array([]) 
     features = get_rf_features(feature_peaks)
-    return img_canvas[...,::-1], features
+    return img_canvas, features
 
 
 def get_height(points):
