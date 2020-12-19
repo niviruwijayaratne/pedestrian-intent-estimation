@@ -32,11 +32,9 @@ def main():
     while True:
         ret, frame = vid.read()
         print("Frame {}".format(counter))
-        counter += 1
-        if counter < 143:
-            continue
         if ret:
             bboxes = detector.get_bbs(frame)
+            print(bboxes)
             print("Found {} people".format(len(bboxes)))
             for i, bbox in enumerate(bboxes):
                 frame, features = img_inference(frame, bbox)
