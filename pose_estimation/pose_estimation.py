@@ -340,7 +340,6 @@ def get_subsets(connection_all, special_k, all_peaks):
                     subset = np.vstack([subset, row])
     return subset, candidate
 
-
 def draw_key_point(subset, all_peaks, img_raw, bbox):
     del_ids = []
     tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
@@ -357,7 +356,7 @@ def draw_key_point(subset, all_peaks, img_raw, bbox):
     return subset, img_canvas
 
 
-def link_key_point(img_canvas, candidate, subset, stickwidth=3, bbox):
+def link_key_point(img_canvas, candidate, subset, bbox, stickwidth=3):
     tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
     for i in range(17):
         for n in range(len(subset)):
@@ -376,18 +375,17 @@ def link_key_point(img_canvas, candidate, subset, stickwidth=3, bbox):
             img_canvas = cv2.addWeighted(img_canvas, 0.4, cur_canvas, 0.6, 0)
     return img_canvas
 
-def img_inference(img, bbox=None):
-    im = cv2.imread(img)
-    if bbox:
+def img_inference(img, bbox=None): 
+    if all(bbox):
         tlx, tly, brx, bry = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        im = im[tly: bry, tlx: brx]
-    im = torch.from_numpy(im).type(torch.cuda.FloatTensor)
+        im = img[tly: bry, tlx: brx]
+    im = torch.from_numpy(im).float().cuda()
     state_dict = torch.load(WEIGHTS_PATH)['state_dict']
     model_pose = get_pose_model()
     model_pose.load_state_dict(state_dict)
     model_pose.float()
     model_pose.eval()
-    use_gpu = False
+    use_gpu = True 
     if use_gpu:
         model_pose.cuda()
         model_pose = torch.nn.DataParallel(model_pose, device_ids=range(torch.cuda.device_count()))
@@ -398,12 +396,13 @@ def img_inference(img, bbox=None):
     feature_peaks = [peaks[i] for i in KEYPOINTS]
     sp_k, con_all = extract_paf_info(im, paf_info, peaks)
     subsets, candidates = get_subsets(con_all, sp_k, peaks)
-    subsets, img_points = draw_key_point(subsets, peaks, im)
-    img_canvas = link_key_point(img_points, candidates, subsets)
+    subsets, img_points = draw_key_point(subsets, peaks, torch.from_numpy(img).float().cuda(), bbox)
+    img_canvas = link_key_point(img_points, candidates, subsets, bbox)
     if not all(feature_peaks):
         return np.array([]), np.array([]) 
     features = get_rf_features(feature_peaks)
-    return img_canvas, features
+    return img_canvas[...,::-1], features
+
 
 
 def get_height(points):

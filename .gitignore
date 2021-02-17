@@ -3,4 +3,5 @@ pose_estimation/utils/
 pose_estimation/JAAD/pose_features_test/
 weights/
 *.pth
-pose_estimation/blah.jpg
+blah.jpg
+output.avi
