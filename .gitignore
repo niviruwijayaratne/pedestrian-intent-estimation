@@ -6,3 +6,4 @@ weights/
 *.pth
 blah.jpg
 output.avi
+.DS_Store
